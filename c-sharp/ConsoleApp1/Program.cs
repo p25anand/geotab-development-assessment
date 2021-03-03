@@ -1,129 +1,210 @@
-﻿using System;
+﻿using JokeGenerator;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 
 namespace ConsoleApp1
 {
     class Program
     {
-        static string[] results = new string[50];
-        static char key;
-        static Tuple<string, string> names;
-        static ConsolePrinter printer = new ConsolePrinter();
 
-        static void Main(string[] args)
+        static string[] categories = new string[50];
+        static ConsolePrinter printer = new ConsolePrinter();
+        const int max_jokes = 9;
+
+        static async Task Main(string[] args)
         {
-            printer.Value("Press ? to get instructions.").ToString();
-            if (Console.ReadLine() == "?")
+
+            AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionTrapper;
+            printer.printConsole("Welcome to Joke Generator Application.");
+            printer.printConsole("Press ? to get instructions or any other key to exit the application.");
+            char key = GetEnteredKey(Console.ReadKey());
+            if (key == '?')
             {
                 while (true)
+
                 {
-                    printer.Value("Press c to get categories").ToString();
-                    printer.Value("Press r to get random jokes").ToString();
-                    GetEnteredKey(Console.ReadKey());
+                    Person person = new Person();
+                    Console.WriteLine();
+                    printer.printConsole("Press c to get categories");
+                    printer.printConsole("Press r to get random jokes");
+                    printer.printConsole("Press Esc to exit");
+                    key = GetEnteredKey(Console.ReadKey());
+                    //get categories
                     if (key == 'c')
                     {
-                        getCategories();
-                        PrintResults();
+                        if (categories.All(item => item == null))
+                        {
+                            await getCategories();
+                        }
+                        PrintResult(categories, "categories");
                     }
-                    if (key == 'r')
+                    //for random jokes
+                    else if (key == 'r')
                     {
-                        printer.Value("Want to use a random name? y/n").ToString();
-                        GetEnteredKey(Console.ReadKey());
+                        //get random name  if user wants
+                        printer.printConsole("Want to use a random name? Press y for Yes or n for No.");
+                        key = GetEnteredKey(Console.ReadKey());
+                        //TODO: if unicode characters in name/other language then ? printed, can change UTF encoding bt not recommended
                         if (key == 'y')
-                            GetNames();
-                        printer.Value("Want to specify a category? y/n").ToString();
-                        if (key == 'y')
+                            person = await GetNames();
+
+                        //get category if user wants
+                        string category = await GetCategoryIfWanted();
+
+                        //get number of jokes
+                        int n = getJokeNumber();
+
+                        //get jokes only if number more than 0
+                        if (n > 0)
                         {
-                            printer.Value("How many jokes do you want? (1-9)").ToString();
-                            int n = Int32.Parse(Console.ReadLine());
-                            printer.Value("Enter a category;").ToString();
-                            GetRandomJokes(Console.ReadLine(), n);
-                            PrintResults();
-                        }
-                        else
-                        {
-                            printer.Value("How many jokes do you want? (1-9)").ToString();
-                            int n = Int32.Parse(Console.ReadLine());
-                            GetRandomJokes(null, n);
-                            PrintResults();
+                            string[] jokes = await GetRandomJokes(category, n, person);
+                            PrintResult(jokes, "jokes");
                         }
                     }
-                    names = null;
+
+                    //Invalid input
+                    else
+                    {
+                        printer.printConsole("ERROR: Wrong key pressed.");
+                    }
+
+
+
                 }
             }
-
-        }
-
-        private static void PrintResults()
-        {
-            printer.Value("[" + string.Join(",", results) + "]").ToString();
-        }
-
-        private static void GetEnteredKey(ConsoleKeyInfo consoleKeyInfo)
-        {
-            switch (consoleKeyInfo.Key)
+            else
             {
-                case ConsoleKey.C:
-                    key = 'c';
-                    break;
-                case ConsoleKey.D0:
-                    key = '0';
-                    break;
-                case ConsoleKey.D1:
-                    key = '1';
-                    break;
-                case ConsoleKey.D3:
-                    key = '3';
-                    break;
-                case ConsoleKey.D4:
-                    key = '4';
-                    break;
-                case ConsoleKey.D5:
-                    key = '5';
-                    break;
-                case ConsoleKey.D6:
-                    key = '6';
-                    break;
-                case ConsoleKey.D7:
-                    key = '7';
-                    break;
-                case ConsoleKey.D8:
-                    key = '8';
-                    break;
-                case ConsoleKey.D9:
-                    key = '9';
-                    break;
-                case ConsoleKey.R:
-                    key = 'r';
-                    break;
-                case ConsoleKey.Y:
-                    key = 'y';
-                    break;
+                Console.WriteLine("Exiting the application.");
+
             }
+
+        }
+        //print result to console
+        private static void PrintResult(string[] result, string resultType)
+        {
+            Console.WriteLine("Below are the " + resultType + ":");
+            for (int i = 0; i < result.Length; i++)
+            {
+                printer.printConsole((i + 1) + ". " + result[i]);
+            }
+
         }
 
-        private static void GetRandomJokes(string category, int number)
+
+
+        private static char GetEnteredKey(ConsoleKeyInfo consoleKeyInfo)
+
         {
-            new JsonFeed("https://api.chucknorris.io", number);
-            results = JsonFeed.GetRandomJokes(names?.Item1, names?.Item2, category);
+            char key = '0';
+            if (consoleKeyInfo.Key == ConsoleKey.Escape)
+            {
+                System.Environment.Exit(0);
+            }
+            else
+            {
+                key = consoleKeyInfo.KeyChar;
+            }
+
+            Console.WriteLine();
+            return key;
+
+        }
+        //for any unhandled exception
+        static void UnhandledExceptionTrapper(object sender, UnhandledExceptionEventArgs e)
+        {
+            Console.WriteLine("ERROR: An error has occured with below details:");
+            Console.WriteLine(e.ExceptionObject.ToString());
+            Console.WriteLine("Press Enter to exit the application");
+            Console.ReadLine();
+            Environment.Exit(1);
+        }
+        private static async Task<string[]> GetRandomJokes(string category, int number, Person person)
+        {
+            new RandomJokeService();
+            //create batch if the jokes  he can ask increase drastically : for better performance
+            List<Task<String>> tasks = new List<Task<String>>();
+            for (int i = 0; i < number; i++)
+            {
+                tasks.Add(RandomJokeService.GetRandomJokes(person, category));
+            }
+            var multipleJokes = await Task.WhenAll(tasks);
+
+
+            return multipleJokes;
+
         }
 
-        private static void getCategories()
+        private static async Task getCategories()
         {
-            new JsonFeed("https://api.chucknorris.io", 0);
-            results = JsonFeed.GetCategories();
+
+            categories = await RandomJokeService.GetCategories();
         }
 
-        private static void GetNames()
+
+        private static async Task<Person> GetNames()
         {
-            new JsonFeed("https://www.names.privserv.com/api/", 0);
-            dynamic result = JsonFeed.Getnames();
-            names = Tuple.Create(result.name.ToString(), result.surname.ToString());
+            Person result = await RandomNameService.Getnames();
+
+            return result;
+        }
+        //return category name
+        private static async Task<string> GetCategoryIfWanted()
+        {
+            string input_category = null;
+            printer.printConsole("Want to specify a category?Press y for Yes or n for No.");
+            char key = GetEnteredKey(Console.ReadKey());
+            if (key == 'y')
+            {
+                printer.printConsole("Enter the number corresponding to the category you want.");
+                //get categories only if empty
+                if (categories.All(item => item == null))
+                {
+                    await getCategories();
+                }
+                PrintResult(categories, "categories");
+
+                //assign category only if correct category number is supplied
+                if (Int32.TryParse(Console.ReadLine(), out int number) && number <= categories.Length)
+                {
+                    input_category = categories[number - 1];
+
+                }
+                else
+                {
+                    printer.printConsole("WARNING: Wrong category number entered.No catergory Taken.");
+
+                }
+
+
+            }
+            return input_category;
+        }
+
+        //return number of jokes wanted
+        private static int getJokeNumber()
+        {
+            int n = 0;
+
+            printer.printConsole("How many jokes do you want? Enter a number from 1 to " + max_jokes + ".");
+            if (!int.TryParse(Console.ReadLine(), out n))
+            {
+                printer.printConsole("ERROR: Value entered is not in form of number.");
+            }
+            else if (n > max_jokes)
+            {
+                printer.printConsole("ERROR: Number given exceeds the maximum limit");
+                n = 0;
+
+            }
+            else if (n <= 0)
+            {
+                printer.printConsole("ERROR: Number given is less than the minimum limit");
+            }
+
+            return n;
+
         }
     }
 }

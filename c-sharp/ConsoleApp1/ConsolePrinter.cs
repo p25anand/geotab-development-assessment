@@ -10,18 +10,12 @@ namespace ConsoleApp1
 {
     public class ConsolePrinter
     {
-        public static object PrintValue;
+       
 
-        public ConsolePrinter Value(string value)
-        {
-            PrintValue = value;
-            return this;
-        }
-
-        public override string ToString()
+        public  void printConsole(string PrintValue)
         {
             Console.WriteLine(PrintValue);
-            return null;
+           
         }
     }
 }
